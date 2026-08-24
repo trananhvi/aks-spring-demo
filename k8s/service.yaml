@@ -1,0 +1,50 @@
+# ---------------------------------------------------------------------------
+# Service: a stable address in front of a changing set of pods.
+#
+# Pods are disposable - they get new IPs every restart. A Service gives you one
+# name and one IP that always routes to whichever pods currently match its
+# selector.
+#
+# type: LoadBalancer asks the cloud provider for a real public IP. On AKS that
+# provisions a rule on the Azure load balancer in the MC_* resource group. This
+# is why the app is reachable from the internet at all; the default type,
+# ClusterIP, is only reachable from inside the cluster.
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: gs-spring-boot-docker
+  labels:
+    app: gs-spring-boot-docker
+
+spec:
+  type: LoadBalancer
+
+  # A FLAT map here - note the difference from the Deployment, which nests the
+  # equivalent under `selector.matchLabels`. Same idea, different shape, and a
+  # frequent source of confusion. Services predate the matchLabels syntax.
+  #
+  # This must match the pod template labels in deployment.yaml. It does not
+  # reference the Deployment - a Service knows nothing about Deployments, only
+  # about pods carrying matching labels.
+  selector:
+    app: gs-spring-boot-docker
+
+  ports:
+    - name: http
+
+      # The port on the public IP. Visitors hit http://<external-ip>/ on 80.
+      port: 80
+
+      # The port on the pod. Spring Boot listens here.
+      # This mapping is why you do not need the app to run as root to bind 80.
+      targetPort: 8080
+
+      protocol: TCP
+
+      # A third port exists that is not written here. `kubectl get svc` shows
+      # something like 80:30956/TCP - that 30956 is the nodePort, allocated
+      # automatically on every node. A LoadBalancer Service is built on top of
+      # a NodePort Service, which is built on top of a ClusterIP Service.
+      # Kubernetes assigns the nodePort itself unless you pin it.

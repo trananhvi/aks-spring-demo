@@ -1,0 +1,87 @@
+# ---------------------------------------------------------------------------
+# Deployment: "keep N copies of this pod running".
+#
+# You never create Pods directly. A Deployment creates a ReplicaSet, and the
+# ReplicaSet creates Pods. If a pod dies, the ReplicaSet replaces it. If you
+# change the image here, the Deployment rolls out a new ReplicaSet gradually
+# and can roll back to the old one.
+# ---------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: gs-spring-boot-docker
+  labels:
+    app: gs-spring-boot-docker
+
+spec:
+  replicas: 1
+
+  # Which pods this Deployment owns. This must match the pod template labels
+  # below, and it is immutable once created - changing it means deleting and
+  # recreating the Deployment.
+  selector:
+    matchLabels:
+      app: gs-spring-boot-docker
+
+  # The pod template. Everything under `template` describes a pod to create,
+  # not the Deployment itself.
+  template:
+    metadata:
+      labels:
+        # These labels are the ONLY thing connecting this Deployment to the
+        # Service in service.yaml. There is no reference by name, no nesting -
+        # the Service just looks for pods carrying app=gs-spring-boot-docker.
+        #
+        # Get this wrong and nothing errors. The Service simply has no pods
+        # behind it and the load balancer returns nothing. `kubectl get endpoints`
+        # showing an empty list is the signature of that bug.
+        app: gs-spring-boot-docker
+
+    spec:
+      containers:
+        - name: gs-spring-boot-docker
+
+          # Replaced by the real tag at deploy time. The workflow substitutes
+          # this placeholder with <registry>/<image>:<commit-sha>, so the applied
+          # manifest always names one exact immutable image.
+          image: __IMAGE__
+
+          ports:
+            # Documentation only - it does not open or forward anything. Spring
+            # Boot listens on 8080 because of its own defaults, not because of
+            # this line. The Service is what actually routes traffic here.
+            - containerPort: 8080
+
+          # Without limits, one misbehaving pod can starve the whole node.
+          # `requests` is what the scheduler reserves when placing the pod;
+          # `limits` is the hard ceiling. Exceeding the memory limit kills the
+          # container (OOMKilled); exceeding the CPU limit only throttles it.
+          resources:
+            requests:
+              cpu: 100m         # 0.1 of a core
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+
+          # Readiness gates traffic: until this passes, the Service will not
+          # send requests to this pod. A JVM takes several seconds to boot, so
+          # without it the load balancer would route to a pod that is not
+          # listening yet and users would see connection errors during rollouts.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+
+          # Liveness restarts a pod that has wedged - deadlocked, out of memory,
+          # otherwise alive but useless. Deliberately slower and more forgiving
+          # than readiness: a trigger-happy liveness probe restart-loops a
+          # perfectly healthy app that is merely slow.
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15

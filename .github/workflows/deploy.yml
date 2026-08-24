@@ -1,0 +1,125 @@
+# ---------------------------------------------------------------------------
+# CD: deploy an already-built image to the AKS cluster.
+#
+# Split from build-push.yml on purpose. Building proves the code compiles into
+# an image; deploying puts a specific image on a specific cluster. Keeping them
+# apart means you can redeploy an old image without rebuilding, and rebuild
+# without deploying.
+#
+# Manual trigger only. The cluster gets destroyed between sessions to save
+# money, so an automatic push trigger would paint a red X on every unrelated
+# commit made while it is down.
+#
+# Requires terraform/cluster to have been applied.
+# ---------------------------------------------------------------------------
+
+name: Deploy to AKS
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy (a commit SHA). Leave blank for the most recently pushed.'
+        required: false
+        default: ''
+
+permissions:
+  id-token: write
+  contents: read
+
+# Must match terraform/registry/variables.tf and terraform/cluster/variables.tf.
+env:
+  ACR_NAME: quayvitran
+  IMAGE_NAME: gs-spring-boot-docker
+  RESOURCE_GROUP: aks-spring-demo
+  CLUSTER_NAME: spring-demo-aks
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # If you did not name a tag, ask the registry which one is newest. This
+      # keeps the common case a single click while still letting you pin an
+      # exact commit - which is how you roll back.
+      - name: Work out which tag to deploy
+        run: |
+          TAG="${{ inputs.image_tag }}"
+          if [ -z "$TAG" ]; then
+            TAG=$(az acr repository show-tags \
+                    --name "$ACR_NAME" \
+                    --repository "$IMAGE_NAME" \
+                    --orderby time_desc --top 1 -o tsv)
+            echo "No tag given; using most recent: $TAG"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "::error::No images found in $ACR_NAME/$IMAGE_NAME. Run build-push.yml first."
+            exit 1
+          fi
+          echo "IMAGE=${ACR_NAME}.azurecr.io/${IMAGE_NAME}:${TAG}" >> "$GITHUB_ENV"
+
+      # Writes a kubeconfig on the runner. --overwrite-existing avoids the
+      # merge failure you hit locally with a malformed config file; here the
+      # runner is fresh every time, so there is never anything worth keeping.
+      - name: Point kubectl at the cluster
+        run: |
+          az aks get-credentials \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$CLUSTER_NAME" \
+            --overwrite-existing
+
+      # Substituting into the file rather than running `kubectl set image` keeps
+      # the manifest the single source of truth. With set image, the file on
+      # disk and the object in the cluster drift apart, and the next plain
+      # `kubectl apply` silently reverts the image.
+      - name: Stamp the image into the manifest
+        run: |
+          sed -i "s|__IMAGE__|${IMAGE}|g" k8s/deployment.yaml
+          echo "Deploying ${IMAGE}"
+          grep -n 'image:' k8s/deployment.yaml
+
+      - name: Apply the manifests
+        run: kubectl apply -f k8s/
+
+      # apply only tells you Kubernetes accepted the YAML. This is the step that
+      # tells you the deployment actually worked: it fails the job if the new
+      # pods never become ready - a bad image, a failing readiness probe, or an
+      # ImagePullBackOff because the AcrPull role assignment is missing.
+      - name: Wait for the rollout to finish
+        run: kubectl rollout status deployment/gs-spring-boot-docker --timeout=180s
+
+      # Azure takes a minute or two to assign the public IP on first creation.
+      - name: Wait for the load balancer IP
+        run: |
+          kubectl wait --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' \
+            service/gs-spring-boot-docker --timeout=300s
+
+      - name: Report where it is running
+        run: |
+          IP=$(kubectl get svc gs-spring-boot-docker -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+          # endpoints is the check that catches a label selector mismatch. If
+          # this list is empty, the Service matched no pods - traffic goes
+          # nowhere and nothing reports an error anywhere else.
+          echo "--- endpoints (empty here means the selector matched no pods) ---"
+          kubectl get endpoints gs-spring-boot-docker
+
+          echo "--- pods ---"
+          kubectl get pods -l app=gs-spring-boot-docker
+
+          {
+            echo "### Deployed"
+            echo ""
+            echo "- image: \`${IMAGE}\`"
+            echo "- url: http://${IP}"
+          } >> "$GITHUB_STEP_SUMMARY"
