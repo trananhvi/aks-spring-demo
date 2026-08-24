@@ -29,10 +29,28 @@ variable "cluster_name" {
   default     = "spring-demo-aks"
 }
 
-variable "node_count" {
-  description = "Number of nodes. One is enough here, and each one costs money."
-  type        = number
-  default     = 1
+variable "node_min_count" {
+  description = <<-EOT
+    Floor for the cluster autoscaler, and the size the cluster starts at.
+
+    Cannot be 0 for a cluster's only node pool - something has to run the system
+    pods (CoreDNS, kube-proxy, metrics-server). So this is your standing cost:
+    one node, always on, whether or not anyone is using the app.
+  EOT
+  type    = number
+  default = 1
+}
+
+variable "node_max_count" {
+  description = <<-EOT
+    Ceiling for the cluster autoscaler. This is your real cost cap - the HPA's
+    maxReplicas caps pods, but pods are free; nodes are what you pay for.
+
+    At 3 nodes of Standard_D2as_v7 you are looking at roughly triple the
+    baseline. Keep it low while learning.
+  EOT
+  type    = number
+  default = 3
 }
 
 variable "node_vm_size" {

@@ -1,0 +1,71 @@
+# ---------------------------------------------------------------------------
+# HorizontalPodAutoscaler: add and remove pods based on load.
+#
+# The control loop runs every 15 seconds. It reads current CPU usage from
+# metrics-server, compares it to the target below, and computes:
+#
+#   desiredReplicas = ceil( currentReplicas * currentMetric / targetMetric )
+#
+# So 2 pods averaging 90% against a 50% target gives ceil(2 * 90/50) = 4 pods.
+#
+# This depends on the container declaring resources.requests.cpu in
+# deployment.yaml. Utilization is measured as a PERCENTAGE OF THE REQUEST, not
+# of the node. With no request declared there is no denominator, and the HPA
+# reports <unknown> and never scales. That is the single most common reason an
+# HPA appears to do nothing.
+# ---------------------------------------------------------------------------
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+
+metadata:
+  name: gs-spring-boot-docker
+
+spec:
+  # What to scale. Unlike a Service, this IS a direct reference by name - the
+  # HPA writes to the Deployment's replica count.
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gs-spring-boot-docker
+
+  minReplicas: 1
+
+  # Your ceiling, and your cost cap. Each pod requests 100m CPU, and a
+  # Standard_D2as_v7 node has 2 cores with some reserved for the system, so
+  # five of these fit on one node comfortably.
+  maxReplicas: 5
+
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+
+          # 50% of the 100m request = 50m of actual CPU. Deliberately low so a
+          # small load test visibly triggers scaling. Production values are
+          # usually 70-80%; too low and you pay for idle pods, too high and you
+          # start scaling only after latency has already degraded.
+          averageUtilization: 50
+
+  # Tuning how eagerly it reacts. Without this block you get the defaults:
+  # instant scale-up, and a 5 minute stabilization window before scaling down.
+  behavior:
+    scaleUp:
+      # React immediately rather than waiting to confirm the trend.
+      stabilizationWindowSeconds: 0
+      policies:
+        # At most double the pod count every 15 seconds.
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+
+    scaleDown:
+      # Before removing pods, require load to stay low for 5 minutes. Scaling
+      # down eagerly is how you get thrashing: traffic dips, pods are removed,
+      # traffic returns, and now you are cold-starting JVMs under load.
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60

@@ -68,10 +68,28 @@ resource "azurerm_kubernetes_cluster" "aks" {
   # the nodes below - the tier only prices the control plane.
   sku_tier = "Free"
 
+  # The second scaling layer: the cluster autoscaler.
+  #
+  # The HPA in k8s/hpa.yaml adds pods. It does not add machines. When a pod
+  # cannot be placed because no node has room, it sits in Pending with
+  # "Insufficient cpu" - the HPA did its job, there was just nowhere to put it.
+  #
+  # With auto-scaling on, the cluster autoscaler watches for exactly that and
+  # adds a node, then removes it again once it has been underused for ~10
+  # minutes. min_count = 1 means you always pay for one node; scaling to zero
+  # is not possible for a cluster's only node pool.
   default_node_pool {
-    name       = "default"
-    node_count = var.node_count
-    vm_size    = var.node_vm_size
+    name    = "default"
+    vm_size = var.node_vm_size
+
+    auto_scaling_enabled = true
+    min_count            = var.node_min_count
+    max_count            = var.node_max_count
+
+    # With auto-scaling on this is only the STARTING size. Azure changes it
+    # afterwards, which is why it is ignored below - otherwise every plan would
+    # want to shrink your cluster back to the number written here.
+    node_count = var.node_min_count
   }
 
   # A managed identity for the cluster, created and rotated by Azure. The
@@ -82,6 +100,18 @@ resource "azurerm_kubernetes_cluster" "aks" {
   }
 
   tags = var.tags
+
+  # Terraform's answer to "something else legitimately changes this field".
+  #
+  # The cluster autoscaler adjusts node_count at runtime. Without this block,
+  # Terraform would see 3 nodes where the config says 1, call it drift, and
+  # offer to scale you back down on every single plan. ignore_changes tells it
+  # to stop caring about that one attribute after creation.
+  #
+  # Use this sparingly - it is a deliberate blind spot in your state.
+  lifecycle {
+    ignore_changes = [default_node_pool[0].node_count]
+  }
 }
 
 # ---------------------------------------------------------------------------

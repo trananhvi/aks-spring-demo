@@ -15,7 +15,17 @@ metadata:
     app: gs-spring-boot-docker
 
 spec:
-  replicas: 1
+  # `replicas` is deliberately ABSENT.
+  #
+  # Once an HPA manages this Deployment, the replica count belongs to the HPA.
+  # If you also declare it here, every `kubectl apply` resets the count to
+  # whatever the file says, the HPA notices and scales back up, and the two
+  # fight each other - your pod count sawtooths after every deployment.
+  #
+  # Omitting the field means apply does not touch it. Kubernetes defaults it to
+  # 1 on first creation, and the HPA owns it from then on.
+  #
+  # See k8s/hpa.yaml.
 
   # Which pods this Deployment owns. This must match the pod template labels
   # below, and it is immutable once created - changing it means deleting and
