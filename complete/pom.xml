@@ -15,6 +15,9 @@
 	<description>Demo project for Spring Boot</description>
 	<properties>
 		<java.version>17</java.version>
+ 		<!-- Note: If your ACR name contains upper case characters, be sure to convert them to lower case characters. -->
+   		<docker.image.prefix>quayvitran.azurecr.io</docker.image.prefix>
+   		<jib-maven-plugin.version>3.4.4</jib-maven-plugin.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -34,6 +37,19 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+			<artifactId>jib-maven-plugin</artifactId>
+			<groupId>com.google.cloud.tools</groupId>
+			<version>${jib-maven-plugin.version}</version>
+			<configuration>
+				<from>
+					<image>mcr.microsoft.com/openjdk/jdk:17-ubuntu</image>
+				</from>
+				<to>
+					<image>${docker.image.prefix}/gs-spring-boot-docker</image>
+				</to>
+			</configuration>
 			</plugin>
 		</plugins>
 	</build>
