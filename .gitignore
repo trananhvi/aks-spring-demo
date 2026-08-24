@@ -17,3 +17,17 @@ README.html
 *.iml
 .idea
 .vscode/
+
+# Terraform
+# .terraform/ holds downloaded provider binaries - large, and re-created by `terraform init`.
+# State files record the real IDs of everything Terraform manages and can contain
+# secrets in plain text, so they must never be committed.
+# Note that .terraform.lock.hcl is deliberately NOT ignored: it pins exact provider
+# versions so every machine resolves the same ones, and belongs in git.
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Scratch files from one-off az commands
+fedcred*.json

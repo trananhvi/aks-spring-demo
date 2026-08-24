@@ -1,0 +1,93 @@
+# ---------------------------------------------------------------------------
+# CI: build the Spring Boot app into a container image and push it to ACR.
+#
+# This is the "continuous integration" half - it produces an artifact (the
+# image) and proves it builds. It does not deploy anything. Deployment is
+# deploy.yml, and infrastructure is Terraform. Three separate lifecycles.
+#
+# Requires terraform/registry to have been applied first: you cannot push to a
+# registry that does not exist.
+# ---------------------------------------------------------------------------
+
+name: Build and Push Image
+
+on:
+  push:
+    branches: [main]
+
+    # Without this filter, editing the README would rebuild and republish the
+    # image. Only run when something that affects the image actually changes.
+    paths:
+      - 'complete/**'
+      - '.github/workflows/build-push.yml'
+
+  # Also allow the manual "Run workflow" button.
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # lets the job request an OIDC token for azure/login
+  contents: read    # naming any permission drops all the others to none
+
+# Workflow-level env is visible to every step in every job.
+# These must match the defaults in terraform/registry/variables.tf. Wiring
+# Terraform outputs into Actions automatically is possible, but it needs remote
+# state - a later lesson. Two hardcoded strings is the honest simple version.
+env:
+  ACR_NAME: quayvitran
+  IMAGE_NAME: gs-spring-boot-docker
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Runners start empty. Without this, there is no source code on the VM.
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          # Caches ~/.m2 between runs, keyed on your pom files. First run is
+          # slow, later runs skip re-downloading every Spring dependency.
+          cache: maven
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # This is the command that failed on your laptop with DOCKER_COMMAND_ERROR.
+      # It works here because GitHub's Ubuntu runners ship with Docker installed.
+      # It writes a short-lived token into ~/.docker/config.json, which Jib then
+      # reads - so no credentials appear anywhere in this file.
+      - name: Log in to the container registry
+        run: az acr login --name "$ACR_NAME"
+
+      # Tagged with the commit SHA, never "latest".
+      #
+      # A floating "latest" tag means `kubectl apply` sees an unchanged manifest,
+      # does nothing, and your new code silently never deploys. An immutable tag
+      # per commit makes every deployment traceable to exactly one commit, and
+      # makes rollback a matter of re-deploying an older tag.
+      #
+      # -Djib.to.image overrides the <to><image> in complete/pom.xml, so the pom
+      # keeps working for local builds while CI controls the real tag.
+      - name: Build and push the image
+        run: |
+          IMAGE="${ACR_NAME}.azurecr.io/${IMAGE_NAME}:${GITHUB_SHA}"
+          echo "Building and pushing $IMAGE"
+          mvn -B -f complete/pom.xml compile jib:build -Djib.to.image="$IMAGE"
+
+          # Make the tag visible to later steps and to the run summary page.
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "Pushed \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # Independent confirmation. Jib reporting success and the registry
+      # actually holding the tag are two different claims.
+      - name: Confirm the tag landed in the registry
+        run: az acr repository show-tags --name "$ACR_NAME" --repository "$IMAGE_NAME" --output table
