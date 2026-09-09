@@ -18,9 +18,9 @@ variable "resource_group_name" {
 }
 
 variable "acr_name" {
-  description = "Existing container registry created by terraform/registry."
+  description = "Existing container registry created by terraform/registry. Must match its acr_name."
   type        = string
-  default     = "quayvitran"
+  default     = "quayvitrankms"
 }
 
 variable "cluster_name" {
@@ -46,11 +46,16 @@ variable "node_max_count" {
     Ceiling for the cluster autoscaler. This is your real cost cap - the HPA's
     maxReplicas caps pods, but pods are free; nodes are what you pay for.
 
-    At 3 nodes of Standard_D2as_v7 you are looking at roughly triple the
-    baseline. Keep it low while learning.
+    Set to 2, not 3, because this runs on an Azure free trial subscription.
+    Those carry a low regional vCPU quota - commonly 4 total. At 2 vCPU per
+    node, 3 nodes would need 6 and the autoscaler would fail partway through a
+    scale-up with a quota error, which reads as a confusing Kubernetes problem
+    rather than the billing limit it actually is.
+
+    On a pay-as-you-go subscription this can go higher.
   EOT
   type    = number
-  default = 3
+  default = 2
 }
 
 variable "node_vm_size" {

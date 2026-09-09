@@ -29,14 +29,15 @@ variable "acr_name" {
     Container registry name. This becomes <name>.azurecr.io and must be globally
     unique across all of Azure, alphanumeric only, 5-50 characters.
 
-    Kept as "quayvitran" so it matches docker.image.prefix in complete/pom.xml,
-    which means local `mvn jib:build` runs keep working without extra flags.
+    Matches docker.image.prefix in complete/pom.xml, so local `mvn jib:build`
+    runs keep working without extra flags. Change both together.
 
-    If apply fails because the name is taken - a deleted registry name can stay
-    reserved for a while - change it here AND in complete/pom.xml line 19.
+    Renamed from "quayvitran" when the project moved to the KMS subscription.
+    Azure can hold a recently deleted registry name in reserve, so reusing the
+    old one straight after destroying it risks a name-unavailable error.
   EOT
   type        = string
-  default     = "quayvitran"
+  default     = "quayvitrankms"
 
   validation {
     condition     = can(regex("^[a-zA-Z0-9]{5,50}$", var.acr_name))

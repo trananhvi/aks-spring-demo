@@ -10,7 +10,7 @@
 # ---------------------------------------------------------------------------
 
 output "acr_login_server" {
-  description = "Registry hostname, e.g. quayvitran.azurecr.io - the prefix for every image tag."
+  description = "Registry hostname, e.g. quayvitrankms.azurecr.io - the prefix for every image tag."
   value       = azurerm_container_registry.acr.login_server
 }
 

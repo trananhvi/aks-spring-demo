@@ -29,7 +29,7 @@ permissions:
 
 # Must match terraform/registry/variables.tf and terraform/cluster/variables.tf.
 env:
-  ACR_NAME: quayvitran
+  ACR_NAME: quayvitrankms
   IMAGE_NAME: gs-spring-boot-docker
   RESOURCE_GROUP: aks-spring-demo
   CLUSTER_NAME: spring-demo-aks

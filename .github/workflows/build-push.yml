@@ -33,7 +33,7 @@ permissions:
 # Terraform outputs into Actions automatically is possible, but it needs remote
 # state - a later lesson. Two hardcoded strings is the honest simple version.
 env:
-  ACR_NAME: quayvitran
+  ACR_NAME: quayvitrankms
   IMAGE_NAME: gs-spring-boot-docker
 
 jobs:
