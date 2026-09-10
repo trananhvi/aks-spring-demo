@@ -47,6 +47,11 @@ data "azurerm_container_registry" "acr" {
   resource_group_name = data.azurerm_resource_group.main.name
 }
 
+data "azurerm_user_assigned_identity" "github" {
+  name                = var.github_identity_name
+  resource_group_name = data.azurerm_resource_group.main.name
+}
+
 # ---------------------------------------------------------------------------
 # The cluster - `az aks create`.
 #
@@ -121,10 +126,11 @@ resource "azurerm_kubernetes_cluster" "aks" {
 # all it did: grant the cluster's kubelet identity permission to pull from the
 # registry. Nothing more magical than that.
 #
-# It is also the reason the GitHub service principal needed "Role Based Access
-# Control Administrator" and not just "Contributor" - Contributor can create
-# almost anything, but explicitly cannot create role assignments. Otherwise any
-# Contributor could quietly promote themselves to Owner.
+# Creating a role assignment needs Owner or Role Based Access Control
+# Administrator at the scope. Contributor can create almost anything but
+# explicitly cannot do this - otherwise any Contributor could quietly promote
+# themselves to Owner. You run Terraform as Owner of the subscription, so it
+# works; a Contributor-only account would fail here.
 #
 # Note the two references below. `scope` points at the data source, `principal_id`
 # at the cluster resource. Those references are what tell Terraform this must be
@@ -138,5 +144,30 @@ resource "azurerm_role_assignment" "aks_pull_from_acr" {
   # The kubelet identity is brand new at this point, and Entra takes a few
   # seconds to replicate it. Without this, apply intermittently fails claiming
   # the principal does not exist. Skipping the check is the documented fix.
+  skip_service_principal_aad_check = true
+}
+
+# ---------------------------------------------------------------------------
+# Lets the GitHub Actions identity run `az aks get-credentials`.
+#
+# Without this, deploy.yml logs into Azure successfully and then fails at the
+# kubeconfig step - which reads as a Kubernetes problem but is purely an Azure
+# permissions one.
+#
+# "Cluster User" is the low-privilege option: it can fetch a kubeconfig, and
+# nothing else at the Azure level. It cannot resize the cluster, change the
+# node pool, or delete anything. (What that kubeconfig can then do INSIDE the
+# cluster is a separate question, governed by Kubernetes RBAC.)
+#
+# It sits in this module rather than the registry module for a simple reason:
+# it is scoped to the cluster, and the cluster does not exist over there.
+# Destroy the cluster and this grant goes with it, which is correct - a
+# permission pointing at a deleted cluster is just clutter.
+# ---------------------------------------------------------------------------
+resource "azurerm_role_assignment" "github_aks_user" {
+  scope                = azurerm_kubernetes_cluster.aks.id
+  role_definition_name = "Azure Kubernetes Service Cluster User Role"
+  principal_id         = data.azurerm_user_assigned_identity.github.principal_id
+
   skip_service_principal_aad_check = true
 }

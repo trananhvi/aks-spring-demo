@@ -6,9 +6,15 @@
 # ---------------------------------------------------------------------------
 
 variable "subscription_id" {
-  description = "Azure subscription to build in."
+  description = "Azure subscription to build in. KMS Technology tenant, free trial."
   type        = string
-  default     = "09edd562-ff99-4aa1-a4c6-a093ce9d79b2"
+  default     = "e9d8503a-0aae-40c2-a82e-eca5676787d3"
+}
+
+variable "github_identity_name" {
+  description = "Managed identity created by terraform/registry. Must match its output."
+  type        = string
+  default     = "github-actions"
 }
 
 variable "resource_group_name" {

@@ -7,9 +7,22 @@
 # ---------------------------------------------------------------------------
 
 variable "subscription_id" {
-  description = "Azure subscription to build in."
+  description = "Azure subscription to build in. KMS Technology tenant, free trial."
   type        = string
-  default     = "09edd562-ff99-4aa1-a4c6-a093ce9d79b2"
+  default     = "e9d8503a-0aae-40c2-a82e-eca5676787d3"
+}
+
+variable "github_repository_subject" {
+  description = <<-EOT
+    The OIDC subject GitHub presents when a workflow runs. Azure matches this as
+    a plain string with no wildcards - one wrong character and login fails with
+    AADSTS700213.
+
+    GitHub uses an "immutable" format here: owner@ownerID/repo@repoID. The numeric
+    IDs never change, so renaming the repo or the account does not break the trust.
+  EOT
+  type        = string
+  default     = "repo:trananhvi@45766968/aks-spring-demo@1344499652:ref:refs/heads/main"
 }
 
 variable "resource_group_name" {
