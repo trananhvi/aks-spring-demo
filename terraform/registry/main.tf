@@ -118,21 +118,19 @@ resource "azurerm_user_assigned_identity" "github" {
 # match are harmless - Azure just needs one of them to.
 # ---------------------------------------------------------------------------
 resource "azurerm_federated_identity_credential" "github_main" {
-  name                = "github-main"
-  resource_group_name = azurerm_resource_group.main.name
-  parent_id           = azurerm_user_assigned_identity.github.id
-  issuer              = "https://token.actions.githubusercontent.com"
-  subject             = var.github_repository_subject
-  audience            = ["api://AzureADTokenExchange"]
+  name      = "github-main"
+  parent_id = azurerm_user_assigned_identity.github.id
+  issuer    = "https://token.actions.githubusercontent.com"
+  subject   = var.github_repository_subject
+  audience  = ["api://AzureADTokenExchange"]
 }
 
 resource "azurerm_federated_identity_credential" "github_main_legacy" {
-  name                = "github-main-legacy"
-  resource_group_name = azurerm_resource_group.main.name
-  parent_id           = azurerm_user_assigned_identity.github.id
-  issuer              = "https://token.actions.githubusercontent.com"
-  subject             = "repo:trananhvi/aks-spring-demo:ref:refs/heads/main"
-  audience            = ["api://AzureADTokenExchange"]
+  name      = "github-main-legacy"
+  parent_id = azurerm_user_assigned_identity.github.id
+  issuer    = "https://token.actions.githubusercontent.com"
+  subject   = "repo:trananhvi/aks-spring-demo:ref:refs/heads/main"
+  audience  = ["api://AzureADTokenExchange"]
 }
 
 # ---------------------------------------------------------------------------
