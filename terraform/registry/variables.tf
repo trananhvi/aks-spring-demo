@@ -62,8 +62,8 @@ variable "tags" {
   description = "Tags applied to everything here. Useful for spotting stray resources on your bill."
   type        = map(string)
   default = {
-    project     = "aks-spring-demo"
-    managed_by  = "terraform"
-    lifecycle   = "long-lived"
+    project    = "aks-spring-demo"
+    managed_by = "terraform"
+    lifecycle  = "long-lived"
   }
 }
